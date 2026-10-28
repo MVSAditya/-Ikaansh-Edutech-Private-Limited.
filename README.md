@@ -1,6 +1,6 @@
 # Fieldwork | Employee Task Management
 
-A full-stack employee task management application built with Java 17, Spring Boot, MySQL, JWT, and React. The API provides role-based access, validation, paginated/filterable task queries, OpenAPI documentation, Flyway migrations, and persistence audit logs.
+A full-stack employee and project task management application built with Java 17, Spring Boot, MySQL, JWT, and React. The API provides role-based access, validation, paginated/filterable task queries, project lifecycle management, OpenAPI documentation, Flyway migrations, and persistence audit logs.
 
 ## Run the full stack
 
@@ -48,7 +48,8 @@ Open the Vite URL printed in the terminal. Flyway applies `src/main/resources/db
 
 1. Sign in with the bootstrap ADMIN credentials configured in `.env`.
 2. Register employee accounts through the UI with a name, email, department, and password. Registration creates the `EMPLOYEE` login and matching employee profile in one transaction.
-3. Create and assign tasks from the manager account. Employees see only their own assigned tasks; managers and admins see the team view.
+3. Create a project in the Projects view and set its lifecycle to Planning, Active, On hold, or Completed.
+4. Create and assign tasks from the Tasks view, optionally linking each task to a project. Employees see only their own assigned tasks; managers and admins see the team view.
 
 Example: create an additional employee profile as an ADMIN (replace the token and values):
 
@@ -82,6 +83,8 @@ Public registration cannot assign privileged roles. The optional bootstrap varia
 | GET, POST | `/api/employees` | ADMIN, MANAGER |
 | GET, PUT | `/api/employees/{id}` | ADMIN, MANAGER |
 | DELETE | `/api/employees/{id}` | ADMIN |
+| GET, POST | `/api/projects` | ADMIN, MANAGER |
+| GET, PUT, DELETE | `/api/projects/{id}` | ADMIN, MANAGER |
 | GET | `/api/tasks` | Authenticated; employees see assigned tasks |
 | GET | `/api/tasks/{id}` | Same visibility as task list |
 | POST, PUT, DELETE | `/api/tasks`, `/api/tasks/{id}` | ADMIN, MANAGER |
@@ -89,10 +92,10 @@ Public registration cannot assign privileged roles. The optional bootstrap varia
 Task listing is paginated and supports sorting and combined filters, for example:
 
 ```text
-GET /api/tasks?page=0&size=10&sort=dueDate,asc&status=IN_PROGRESS&priority=HIGH
+GET /api/tasks?page=0&size=10&sort=dueDate,asc&status=IN_PROGRESS&priority=HIGH&projectId=1
 ```
 
-Task statuses: `TODO`, `IN_PROGRESS`, `DONE`. Priorities: `LOW`, `MEDIUM`, `HIGH`.
+Project statuses: `PLANNING`, `ACTIVE`, `ON_HOLD`, `COMPLETED`. Task statuses: `TODO`, `IN_PROGRESS`, `DONE`. Priorities: `LOW`, `MEDIUM`, `HIGH`.
 
 Example task payload:
 
@@ -103,15 +106,18 @@ Example task payload:
   "status": "IN_PROGRESS",
   "priority": "HIGH",
   "dueDate": "2026-11-05",
+  "projectId": 1,
   "assignedEmployeeId": 1
 }
 ```
+
+`projectId` is optional. Deleting a project keeps its tasks and clears their project association.
 
 Validation, authentication, authorization, conflicts, and missing resources return structured JSON errors. Swagger UI and OpenAPI JSON are available at `/swagger-ui.html` and `/v3/api-docs`.
 
 ## Audit events
 
-The API writes structured create, update, and delete events for Employee and Task persistence to the backend application log. Events include the action, entity type, and entity ID; they intentionally omit personal field values. With Compose, view them using `docker compose logs -f backend`.
+The API writes structured create, update, and delete events for Employee, Project, and Task persistence to the backend application log. Events include the action, entity type, and entity ID; they intentionally omit personal field values. With Compose, view them using `docker compose logs -f backend`.
 
 ## Tests and builds
 

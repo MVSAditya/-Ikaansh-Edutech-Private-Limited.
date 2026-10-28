@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Clock3,
   LogOut,
+  Layers,
   Plus,
   ShieldCheck,
   Sparkles,
@@ -48,14 +49,19 @@ function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
   const [sort, setSort] = useState('createdAt,desc');
   const [page, setPage] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const [taskPage, setTaskPage] = useState({ content: [], totalElements: 0, totalPages: 0 });
   const [employees, setEmployees] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [projectRefreshKey, setProjectRefreshKey] = useState(0);
+  const [activeView, setActiveView] = useState('tasks');
   const [loading, setLoading] = useState(false);
   const [pageError, setPageError] = useState('');
   const [formOpen, setFormOpen] = useState(false);
+  const [projectFormOpen, setProjectFormOpen] = useState(false);
   const [actionError, setActionError] = useState('');
 
   const isManager = session.role === 'ADMIN' || session.role === 'MANAGER';
@@ -66,6 +72,7 @@ function App() {
     const query = new URLSearchParams({ page, size: PAGE_SIZE, sort });
     if (statusFilter) query.set('status', statusFilter);
     if (priorityFilter) query.set('priority', priorityFilter);
+    if (projectFilter) query.set('projectId', projectFilter);
 
     setLoading(true);
     setPageError('');
@@ -81,7 +88,7 @@ function App() {
       });
 
     return () => { active = false; };
-  }, [session.token, page, sort, statusFilter, priorityFilter, refreshKey]);
+  }, [session.token, page, sort, statusFilter, priorityFilter, projectFilter, refreshKey]);
 
   useEffect(() => {
     if (!session.token || !isManager) return undefined;
@@ -95,6 +102,19 @@ function App() {
       });
     return () => { active = false; };
   }, [session.token, isManager]);
+
+  useEffect(() => {
+    if (!session.token || !isManager) return undefined;
+    let active = true;
+    apiRequest('/api/projects', { token: session.token })
+      .then((result) => {
+        if (active) setProjects(result);
+      })
+      .catch((error) => {
+        if (active) setActionError(error.message);
+      });
+    return () => { active = false; };
+  }, [session.token, isManager, projectRefreshKey]);
 
   async function submitAuth(event) {
     event.preventDefault();
@@ -127,6 +147,8 @@ function App() {
     setSession({ token: null, email: null, role: null });
     setTaskPage({ content: [], totalElements: 0, totalPages: 0 });
     setEmployees([]);
+    setProjects([]);
+    setActiveView('tasks');
     setPage(0);
   }
 
@@ -142,6 +164,7 @@ function App() {
           status,
           priority: task.priority,
           dueDate: task.dueDate,
+          projectId: task.projectId,
           assignedEmployeeId: task.assignedEmployeeId,
         }),
       });
@@ -173,6 +196,46 @@ function App() {
       });
       setFormOpen(false);
       setPage(0);
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      setActionError(error.message);
+      throw error;
+    }
+  }
+
+  async function createProject(payload) {
+    setActionError('');
+    try {
+      await apiRequest('/api/projects', {
+        method: 'POST', token: session.token, body: JSON.stringify(payload),
+      });
+      setProjectFormOpen(false);
+      setProjectRefreshKey((key) => key + 1);
+    } catch (error) {
+      setActionError(error.message);
+      throw error;
+    }
+  }
+
+  async function changeProjectStatus(project, status) {
+    setActionError('');
+    try {
+      await apiRequest(`/api/projects/${project.id}`, {
+        method: 'PUT', token: session.token,
+        body: JSON.stringify({ name: project.name, description: project.description, status }),
+      });
+      setProjectRefreshKey((key) => key + 1);
+    } catch (error) {
+      setActionError(error.message);
+    }
+  }
+
+  async function deleteProject(project) {
+    if (!window.confirm(`Delete “${project.name}”? Linked tasks will become unassigned to a project.`)) return;
+    setActionError('');
+    try {
+      await apiRequest(`/api/projects/${project.id}`, { method: 'DELETE', token: session.token });
+      setProjectRefreshKey((key) => key + 1);
       setRefreshKey((key) => key + 1);
     } catch (error) {
       setActionError(error.message);
@@ -217,7 +280,8 @@ function App() {
         </div>
         <p className="nav-caption">WORKSPACE</p>
         <nav className="primary-nav" aria-label="Main navigation">
-          <a className="nav-link active" href="#tasks"><ClipboardList size={17} />Tasks<span className="nav-count">{taskPage.totalElements}</span></a>
+          <button className={`nav-link ${activeView === 'tasks' ? 'active' : ''}`} onClick={() => setActiveView('tasks')}><ClipboardList size={17} />Tasks<span className="nav-count">{taskPage.totalElements}</span></button>
+          {isManager && <button className={`nav-link ${activeView === 'projects' ? 'active' : ''}`} onClick={() => setActiveView('projects')}><LayersIcon />Projects<span className="nav-count">{projects.length}</span></button>}
         </nav>
         <div className="sidebar-bottom">
           <div className="security-note"><ShieldCheck size={17} /><span><strong>Secure workspace</strong><small>JWT protected</small></span></div>
@@ -231,21 +295,22 @@ function App() {
 
       <main className="main-panel" id="tasks">
         <header className="topbar">
-          <div className="breadcrumb"><span>Workspace</span><span className="crumb-slash">/</span><strong>Tasks</strong></div>
+          <div className="breadcrumb"><span>Workspace</span><span className="crumb-slash">/</span><strong>{activeView === 'projects' ? 'Projects' : 'Tasks'}</strong></div>
           <div className="topbar-right"><span className="live-dot" />Workspace synced<span className="topbar-divider" /><span className="topbar-role">{session.role}</span></div>
         </header>
 
         <section className="page-content">
           <div className="page-heading">
             <div>
-              <div className="eyebrow"><span className="eyebrow-line" />TASK MANAGEMENT</div>
-              <h1>{isManager ? 'Task overview' : 'Your tasks'}</h1>
-              <p>{isManager ? 'A clear view of work in motion across your team.' : 'The work assigned to you, all in one place.'}</p>
+              <div className="eyebrow"><span className="eyebrow-line" />{activeView === 'projects' ? 'PROJECT WORKSPACE' : 'TASK MANAGEMENT'}</div>
+              <h1>{activeView === 'projects' ? 'Projects' : isManager ? 'Task overview' : 'Your tasks'}</h1>
+              <p>{activeView === 'projects' ? 'Plan the work, track delivery, and keep tasks connected.' : isManager ? 'A clear view of work in motion across your team.' : 'The work assigned to you, all in one place.'}</p>
             </div>
-            {isManager && <button className="button button-primary" onClick={() => { setActionError(''); setFormOpen(true); }}><Plus size={17} />New task</button>}
+            {isManager && activeView === 'tasks' && <button className="button button-primary" onClick={() => { setActionError(''); setFormOpen(true); }}><Plus size={17} />New task</button>}
+            {isManager && activeView === 'projects' && <button className="button button-primary" onClick={() => { setActionError(''); setProjectFormOpen(true); }}><Plus size={17} />New project</button>}
           </div>
 
-          <div className="summary-grid" aria-label="Task summary">
+          {activeView === 'tasks' && <><div className="summary-grid" aria-label="Task summary">
             <SummaryTile label="Total tasks" value={taskPage.totalElements} note="Matching your filters" icon={<ClipboardList size={17} />} tone="green" />
             <SummaryTile label="In progress" value={activeCount} note="On this page" icon={<Clock3 size={17} />} tone="amber" />
             <SummaryTile label="Completed" value={doneCount} note="On this page" icon={<Check size={17} />} tone="blue" />
@@ -258,6 +323,7 @@ function App() {
               <div className="filters">
                 <label className="filter-control"><span className="sr-only">Filter by status</span><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(0); }}><option value="">All statuses</option>{STATUS_OPTIONS.map((status) => <option key={status} value={status}>{formatStatus(status)}</option>)}</select></label>
                 <label className="filter-control"><span className="sr-only">Filter by priority</span><select value={priorityFilter} onChange={(event) => { setPriorityFilter(event.target.value); setPage(0); }}><option value="">All priorities</option><option value="HIGH">High priority</option><option value="MEDIUM">Medium priority</option><option value="LOW">Low priority</option></select></label>
+                {isManager && <label className="filter-control"><span className="sr-only">Filter by project</span><select value={projectFilter} onChange={(event) => { setProjectFilter(event.target.value); setPage(0); }}><option value="">All projects</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
                 <label className="filter-control sort-control"><ArrowDownUp size={15} /><span className="sr-only">Sort tasks</span><select value={sort} onChange={(event) => { setSort(event.target.value); setPage(0); }}><option value="createdAt,desc">Newest first</option><option value="dueDate,asc">Due date</option><option value="title,asc">Title A–Z</option></select></label>
               </div>
             </div>
@@ -267,7 +333,7 @@ function App() {
 
             <div className="table-wrap">
               <table className="task-table">
-                <thead><tr><th>Task</th><th>Assignee</th><th>Due date</th><th>Priority</th><th>Status</th>{isManager && <th aria-label="Actions" />}</tr></thead>
+                <thead><tr><th>Task</th><th>Project</th><th>Assignee</th><th>Due date</th><th>Priority</th><th>Status</th>{isManager && <th aria-label="Actions" />}</tr></thead>
                 <tbody>
                   {!loading && visibleTasks.map((task) => <TaskRow key={task.id} task={task} isManager={isManager} onStatusChange={changeTaskStatus} onDelete={deleteTask} />)}
                 </tbody>
@@ -280,12 +346,14 @@ function App() {
               <span>Showing {taskPage.totalElements === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, taskPage.totalElements)} of {taskPage.totalElements}</span>
               <div className="page-buttons"><button aria-label="Previous page" disabled={page === 0 || loading} onClick={() => setPage((current) => Math.max(0, current - 1))}><ArrowLeft size={16} /></button><span>Page <strong>{taskPage.totalPages ? page + 1 : 0}</strong> of {taskPage.totalPages}</span><button aria-label="Next page" disabled={page + 1 >= taskPage.totalPages || loading} onClick={() => setPage((current) => current + 1)}><ArrowRight size={16} /></button></div>
             </div>
-          </section>
+          </section></>}
+          {activeView === 'projects' && isManager && <ProjectWorkspace projects={projects} tasks={taskPage.content ?? []} error={actionError} onDismiss={() => setActionError('')} onStatusChange={changeProjectStatus} onDelete={deleteProject} />}
           <footer className="page-footer"><span>FIELDWORK <span className="brand-period">/</span> TEAM OPERATIONS</span><span>Authenticated as {session.email}</span></footer>
         </section>
       </main>
 
-      {formOpen && <TaskDialog employees={employees} onClose={() => setFormOpen(false)} onSubmit={createTask} />}
+      {formOpen && <TaskDialog employees={employees} projects={projects} onClose={() => setFormOpen(false)} onSubmit={createTask} />}
+      {projectFormOpen && <ProjectDialog onClose={() => setProjectFormOpen(false)} onSubmit={createProject} />}
     </div>
   );
 }
@@ -294,10 +362,29 @@ function SummaryTile({ label, value, note, icon, tone }) {
   return <article className="summary-tile"><span className={`summary-icon ${tone}`}>{icon}</span><div className="summary-value">{value}</div><div className="summary-label">{label}</div><div className="summary-note">{note}</div></article>;
 }
 
+function LayersIcon() {
+  return <Layers size={17} aria-hidden="true" />;
+}
+
+function ProjectWorkspace({ projects, tasks, error, onDismiss, onStatusChange, onDelete }) {
+  return (
+    <section className="project-section" aria-labelledby="project-list-title">
+      <div className="project-section-heading"><div><h2 id="project-list-title">Active portfolio</h2><span>{projects.length} projects · delivery status</span></div><div className="project-legend"><span><i className="legend-active" />Active</span><span><i className="legend-planning" />Planning</span></div></div>
+      {error && <div className="notice notice-error"><CircleAlert size={17} />{error}<button className="notice-dismiss" onClick={onDismiss} aria-label="Dismiss"><X size={15} /></button></div>}
+      {projects.length === 0 ? <div className="empty-state project-empty"><span className="empty-icon"><LayersIcon /></span><strong>No projects yet</strong><span>Create a project, then connect tasks to it.</span></div> : <div className="project-grid">{projects.map((project) => {
+        const linkedTasks = tasks.filter((task) => task.projectId === project.id);
+        const complete = linkedTasks.filter((task) => task.status === 'DONE').length;
+        return <article className="project-card" key={project.id}><div className="project-card-top"><span className={`project-mark project-${project.status.toLowerCase()}`}><LayersIcon /></span><span className={`project-status status-${project.status.toLowerCase()}`}>{formatStatus(project.status)}</span></div><h3>{project.name}</h3><p>{project.description || 'No project description yet.'}</p><div className="project-progress-label"><span>Tasks on this page</span><strong>{complete}/{linkedTasks.length} done</strong></div><div className="progress-track"><span style={{ width: `${linkedTasks.length ? complete / linkedTasks.length * 100 : 0}%` }} /></div><div className="project-card-footer"><label className="project-status-control">Lifecycle<select aria-label={`Set ${project.name} lifecycle`} value={project.status} onChange={(event) => onStatusChange(project, event.target.value)}><option value="PLANNING">Planning</option><option value="ACTIVE">Active</option><option value="ON_HOLD">On hold</option><option value="COMPLETED">Completed</option></select></label><button className="icon-button delete-button" title="Delete project" aria-label={`Delete ${project.name}`} onClick={() => onDelete(project)}><X size={16} /></button></div></article>;
+      })}</div>}
+    </section>
+  );
+}
+
 function TaskRow({ task, isManager, onStatusChange, onDelete }) {
   return (
     <tr>
       <td><div className="task-title-cell"><span className={`task-symbol ${task.status.toLowerCase()}`}><ClipboardList size={15} /></span><span><strong>{task.title}</strong><small>{task.description || 'No description'}</small></span></div></td>
+      <td>{task.projectName ? <span className="task-project"><Layers size={13} />{task.projectName}</span> : <span className="no-project">Unassigned</span>}</td>
       <td><span className="assignee"><span className="assignee-avatar">{task.assignedEmployeeName?.slice(0, 1).toUpperCase()}</span>{task.assignedEmployeeName}</span></td>
       <td><span className={`due-date ${task.dueDate && task.dueDate < new Date().toISOString().slice(0, 10) && task.status !== 'DONE' ? 'overdue' : ''}`}>{formatDate(task.dueDate)}</span></td>
       <td><span className={`priority priority-${task.priority.toLowerCase()}`}><span />{task.priority.toLowerCase()}</span></td>
@@ -307,8 +394,8 @@ function TaskRow({ task, isManager, onStatusChange, onDelete }) {
   );
 }
 
-function TaskDialog({ employees, onClose, onSubmit }) {
-  const [form, setForm] = useState({ title: '', description: '', status: 'TODO', priority: 'MEDIUM', dueDate: '', assignedEmployeeId: employees[0]?.id ?? '' });
+function TaskDialog({ employees, projects, onClose, onSubmit }) {
+  const [form, setForm] = useState({ title: '', description: '', status: 'TODO', priority: 'MEDIUM', dueDate: '', projectId: '', assignedEmployeeId: employees[0]?.id ?? '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -325,7 +412,7 @@ function TaskDialog({ employees, onClose, onSubmit }) {
     setBusy(true);
     setError('');
     try {
-      await onSubmit({ ...form, assignedEmployeeId: Number(form.assignedEmployeeId), dueDate: form.dueDate || null });
+      await onSubmit({ ...form, projectId: form.projectId ? Number(form.projectId) : null, assignedEmployeeId: Number(form.assignedEmployeeId), dueDate: form.dueDate || null });
     } catch (submitError) {
       setError(submitError.message);
     } finally {
@@ -341,6 +428,7 @@ function TaskDialog({ employees, onClose, onSubmit }) {
           <label>Task title<input autoFocus required maxLength="180" value={form.title} onChange={(event) => update('title', event.target.value)} placeholder="e.g. Prepare sprint review" /></label>
           <label>Description <span className="optional">Optional</span><textarea maxLength="5000" rows="3" value={form.description} onChange={(event) => update('description', event.target.value)} placeholder="Add context and expected outcome" /></label>
           <div className="form-two-col">
+            <label>Project<select value={form.projectId} onChange={(event) => update('projectId', event.target.value)}><option value="">No project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name} · {formatStatus(project.status)}</option>)}</select></label>
             <label>Assignee<select required value={form.assignedEmployeeId} onChange={(event) => update('assignedEmployeeId', event.target.value)}><option value="">Choose a teammate</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} · {employee.department}</option>)}</select></label>
             <label>Due date<input type="date" value={form.dueDate} onChange={(event) => update('dueDate', event.target.value)} /></label>
             <label>Priority<select value={form.priority} onChange={(event) => update('priority', event.target.value)}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option></select></label>
@@ -352,6 +440,25 @@ function TaskDialog({ employees, onClose, onSubmit }) {
       </section>
     </div>
   );
+}
+
+function ProjectDialog({ onClose, onSubmit }) {
+  const [form, setForm] = useState({ name: '', description: '', status: 'PLANNING' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await onSubmit(form);
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="task-dialog" role="dialog" aria-modal="true" aria-labelledby="project-dialog-title"><div className="dialog-heading"><div><span className="dialog-kicker">PROJECT WORKSPACE</span><h2 id="project-dialog-title">Create a project</h2></div><button className="icon-button" onClick={onClose} aria-label="Close dialog"><X size={19} /></button></div><form onSubmit={submit} className="task-form"><label>Project name<input autoFocus required maxLength="150" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Website refresh" /></label><label>Description <span className="optional">Optional</span><textarea rows="3" maxLength="5000" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="What outcome will this project deliver?" /></label><label>Lifecycle<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="PLANNING">Planning</option><option value="ACTIVE">Active</option><option value="ON_HOLD">On hold</option><option value="COMPLETED">Completed</option></select></label>{error && <div className="inline-error"><CircleAlert size={16} />{error}</div>}<div className="dialog-actions"><button type="button" className="button button-quiet" onClick={onClose}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Creating…' : <><Plus size={16} />Create project</>}</button></div></form></section></div>;
 }
 
 function AuthScreen({ mode, setMode, name, setName, email, setEmail, department, setDepartment,

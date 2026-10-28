@@ -1,6 +1,7 @@
 package com.ikaansh.taskmanager.service;
 
 import com.ikaansh.taskmanager.domain.Employee;
+import com.ikaansh.taskmanager.domain.Project;
 import com.ikaansh.taskmanager.domain.Task;
 import com.ikaansh.taskmanager.domain.TaskPriority;
 import com.ikaansh.taskmanager.domain.TaskStatus;
@@ -8,6 +9,7 @@ import com.ikaansh.taskmanager.dto.TaskRequest;
 import com.ikaansh.taskmanager.dto.TaskResponse;
 import com.ikaansh.taskmanager.exception.ResourceNotFoundException;
 import com.ikaansh.taskmanager.repository.EmployeeRepository;
+import com.ikaansh.taskmanager.repository.ProjectRepository;
 import com.ikaansh.taskmanager.repository.TaskRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,22 +23,26 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final EmployeeRepository employeeRepository;
+    private final ProjectRepository projectRepository;
 
-    public TaskService(TaskRepository taskRepository, EmployeeRepository employeeRepository) {
+    public TaskService(TaskRepository taskRepository, EmployeeRepository employeeRepository,
+                       ProjectRepository projectRepository) {
         this.taskRepository = taskRepository;
         this.employeeRepository = employeeRepository;
+        this.projectRepository = projectRepository;
     }
 
     public TaskResponse create(TaskRequest request) {
         Employee employee = getEmployee(request.assignedEmployeeId());
         Task task = new Task(request.title(), request.description(), request.status(), request.priority(),
                 request.dueDate(), employee);
+        task.setProject(getProject(request.projectId()));
         return TaskResponse.from(taskRepository.save(task));
     }
 
     @Transactional(readOnly = true)
     public Page<TaskResponse> findAll(Pageable pageable, boolean canViewAll, String email,
-                                      TaskStatus status, TaskPriority priority) {
+                                      TaskStatus status, TaskPriority priority, Long projectId) {
         Long employeeId = canViewAll ? null : getEmployeeByEmail(email).getId();
         Specification<Task> specification = (root, query, builder) -> {
             var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
@@ -48,6 +54,9 @@ public class TaskService {
             }
             if (priority != null) {
                 predicates.add(builder.equal(root.get("priority"), priority));
+            }
+            if (projectId != null) {
+                predicates.add(builder.equal(root.get("project").get("id"), projectId));
             }
             return builder.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
         };
@@ -77,6 +86,7 @@ public class TaskService {
         task.setStatus(request.status());
         task.setPriority(request.priority());
         task.setDueDate(request.dueDate());
+        task.setProject(getProject(request.projectId()));
         task.setAssignedEmployee(getEmployee(request.assignedEmployeeId()));
         return TaskResponse.from(taskRepository.save(task));
     }
@@ -95,5 +105,13 @@ public class TaskService {
     private Employee getEmployeeByEmail(String email) {
         return employeeRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee for account " + email + " was not found."));
+    }
+
+    private Project getProject(Long id) {
+        if (id == null) {
+            return null;
+        }
+        return projectRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Project " + id + " was not found."));
     }
 }

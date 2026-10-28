@@ -1,0 +1,13 @@
+package com.ikaansh.taskmanager.dto;
+
+import com.ikaansh.taskmanager.domain.Project;
+import com.ikaansh.taskmanager.domain.ProjectStatus;
+import java.time.Instant;
+
+public record ProjectResponse(Long id, String name, String description, ProjectStatus status,
+                              Instant createdAt, Instant updatedAt) {
+    public static ProjectResponse from(Project project) {
+        return new ProjectResponse(project.getId(), project.getName(), project.getDescription(),
+                project.getStatus(), project.getCreatedAt(), project.getUpdatedAt());
+    }
+}

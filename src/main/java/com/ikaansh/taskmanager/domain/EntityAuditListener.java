@@ -25,6 +25,8 @@ public class EntityAuditListener {
     private void logEvent(String action, Object entity) {
         if (entity instanceof Employee employee) {
             logger.info("audit action={} entity=employee id={}", action, employee.getId());
+        } else if (entity instanceof Project project) {
+            logger.info("audit action={} entity=project id={}", action, project.getId());
         } else if (entity instanceof Task task) {
             logger.info("audit action={} entity=task id={}", action, task.getId());
         }

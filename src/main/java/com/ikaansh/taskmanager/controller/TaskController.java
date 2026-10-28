@@ -48,8 +48,10 @@ public class TaskController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             @RequestParam(required = false) TaskStatus status,
             @RequestParam(required = false) TaskPriority priority,
+            @RequestParam(required = false) Long projectId,
             Authentication authentication) {
-        return taskService.findAll(pageable, canViewAll(authentication), authentication.getName(), status, priority);
+        return taskService.findAll(pageable, canViewAll(authentication), authentication.getName(),
+                status, priority, projectId);
     }
 
     @GetMapping("/{id}")

@@ -13,5 +13,6 @@ public record TaskRequest(
         @NotNull TaskStatus status,
         @NotNull TaskPriority priority,
         LocalDate dueDate,
+        Long projectId,
         @NotNull Long assignedEmployeeId) {
 }

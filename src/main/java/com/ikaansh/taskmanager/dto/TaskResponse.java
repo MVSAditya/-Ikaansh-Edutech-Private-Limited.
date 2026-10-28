@@ -7,11 +7,15 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 public record TaskResponse(Long id, String title, String description, TaskStatus status,
-                           TaskPriority priority, LocalDate dueDate, Long assignedEmployeeId,
+                           TaskPriority priority, LocalDate dueDate, Long projectId, String projectName,
+                           Long assignedEmployeeId,
                            String assignedEmployeeName, Instant createdAt, Instant updatedAt) {
     public static TaskResponse from(Task task) {
         return new TaskResponse(task.getId(), task.getTitle(), task.getDescription(), task.getStatus(),
-                task.getPriority(), task.getDueDate(), task.getAssignedEmployee().getId(),
+                task.getPriority(), task.getDueDate(),
+                task.getProject() == null ? null : task.getProject().getId(),
+                task.getProject() == null ? null : task.getProject().getName(),
+                task.getAssignedEmployee().getId(),
                 task.getAssignedEmployee().getName(), task.getCreatedAt(), task.getUpdatedAt());
     }
 }

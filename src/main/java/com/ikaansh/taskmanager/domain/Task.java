@@ -43,6 +43,10 @@ public class Task {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "project_id")
+    private Project project;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "assigned_employee_id", nullable = false)
     private Employee assignedEmployee;
@@ -84,6 +88,7 @@ public class Task {
     public TaskStatus getStatus() { return status; }
     public TaskPriority getPriority() { return priority; }
     public LocalDate getDueDate() { return dueDate; }
+    public Project getProject() { return project; }
     public Employee getAssignedEmployee() { return assignedEmployee; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
@@ -93,5 +98,6 @@ public class Task {
     public void setStatus(TaskStatus status) { this.status = status; }
     public void setPriority(TaskPriority priority) { this.priority = priority; }
     public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
+    public void setProject(Project project) { this.project = project; }
     public void setAssignedEmployee(Employee assignedEmployee) { this.assignedEmployee = assignedEmployee; }
 }
